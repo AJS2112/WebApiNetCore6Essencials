@@ -1,76 +1,96 @@
-﻿using APICatalogo.Contexts;
+﻿using APICatalogo.DTOs;
 using APICatalogo.Models;
+using APICatalogo.Repository;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace APICatalogo.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/[controller]")]
     public class ProdutosController : ControllerBase
     {
-        private readonly AppDbContext _context;
-        public ProdutosController(AppDbContext context)
+        private readonly IUnitOfWork _uow;
+        private readonly IMapper _mapper;
+        public ProdutosController(IUnitOfWork uow, IMapper mapper)
         {
-            _context = context; 
+            _uow = uow; 
+            _mapper = mapper;
         }
 
         [HttpGet]
-        public ActionResult<IEnumerable<Produto>> Get()
+        public ActionResult<IEnumerable<ProdutoDTO>> Get()
         {
-            var produtos = _context.Produtos.AsNoTracking().ToList();
+            var produtos = _uow.ProdutoRepository.Get().ToList();
             if (produtos is null)
                 return NotFound("Produtos Não Encontrados");
 
-            return produtos;
+            var produtosDTO = _mapper.Map<List<ProdutoDTO>>(produtos);
+            return produtosDTO;
         }
 
-        [HttpGet("{id:int}", Name="ObterProduto")]
-        public ActionResult<Produto> Get(int id)
+        [HttpGet("{id:int:min(1)}", Name="ObterProduto")]
+        public ActionResult<ProdutoDTO> Get(int id)
         {
-            var produto = _context.Produtos.AsNoTracking().FirstOrDefault(p => p.ProdutoId == id);
+            var produto = _uow.ProdutoRepository.GetById(p => p.ProdutoId == id);
             if (produto == null)
                 return NotFound("Produto não encontrado");
 
-            return produto; 
+            var produtoDTO = _mapper.Map<ProdutoDTO>(produto);
+
+            return produtoDTO; 
+        }
+
+        [HttpGet("menorpreco")]
+        public ActionResult<IEnumerable<ProdutoDTO>> GetByPreco()
+        {
+            var produtos = _uow.ProdutoRepository.GetProdutosPorPreco().ToList();
+            var produtosDTO = _mapper.Map<List<ProdutoDTO>>(produtos);
+            return produtosDTO;
         }
 
         [HttpPost]
-        public ActionResult Post(Produto produto)
+        public ActionResult Post(ProdutoDTO produtoDTO)
         {
-            if (produto == null)
+            if (produtoDTO == null)
                 return BadRequest();
 
-            _context.Produtos.Add(produto);
-            _context.SaveChanges();
+            var produto = _mapper.Map<Produto>(produtoDTO);
+
+            _uow.ProdutoRepository.Add(produto);
+            _uow.Commit();
 
             return new CreatedAtRouteResult("ObterProduto",
-                new { id = produto.ProdutoId}, produto);
+                new { id = produto.ProdutoId}, produtoDTO);
         }
 
-        [HttpPut("{int:id}")]
-        public ActionResult Put(int id, Produto produto)
+        [HttpPut("{int:id:min(1)}")]
+        public ActionResult Put(int id, ProdutoDTO produtoDTO)
         {
-            if (produto.ProdutoId == id)    
+            if (produtoDTO.ProdutoId == id)    
                 return BadRequest();
 
-            _context.Entry(produto).State = Microsoft.EntityFrameworkCore.EntityState.Modified;
-            _context.SaveChanges();
+            var produto = _mapper.Map<Produto>(produtoDTO);
 
-            return Ok(produto);
+            _uow.ProdutoRepository.Update(produto);
+            _uow.Commit();
+
+            return Ok(produtoDTO);
         }
 
-        [HttpDelete("{int:id}")]
+        [HttpDelete("{int:id:min(1)}")]
         public ActionResult Delete(int id)
         {
-            var produto = _context.Produtos.FirstOrDefault(p => p.ProdutoId == id);
+            var produto = _uow.ProdutoRepository.GetById(p => p.ProdutoId == id);
             if (produto == null)
                 return NotFound("Produto não encontrado");
 
-            _context.Produtos.Remove(produto);
-            _context.SaveChanges();
+            _uow.ProdutoRepository.Delete(produto);
+            _uow.Commit();
 
-            return Ok(produto);
+            var produtoDTO = _mapper.Map<ProdutoDTO>(produto);
+
+            return Ok(produtoDTO);
         }
     }
 }
